@@ -28,17 +28,21 @@ def check_and_split_video(selected_file,output_resolution, video_bitrate, audio_
     split_files = []  # 用于存储分割后的文件路径，以便后续处理和删除
     amv_files = []    # 存储生成的AMV文件路径
 
+    # 先处理基础文件名（如果启用LLM）
+    if if_use_llm.get()==1:
+        if_llm=False
+        base_name = llm(os.path.splitext(os.path.basename(selected_file))[0])
+    else:
+        if_llm=True
+        base_name = os.path.splitext(os.path.basename(selected_file))[0]
+
     # 分割视频
     for i in range(num_segments):
         start_time = timedelta(seconds=i*split_video_time)
         end_time = timedelta(seconds=(i+1)*split_video_time)
-        if if_use_llm.get()==1:
-            if_llm=False
-            base_name=os.path.splitext(os.path.basename(selected_file))[0]
-            output_file=f"{os.path.splitext(selected_file)[0]}_{i+1}{os.path.splitext(selected_file)[1]}"
-        else:
-            if_llm=True
-            output_file = f"{os.path.splitext(selected_file)[0]}_{i+1}{os.path.splitext(selected_file)[1]}"
+        
+        # 使用处理后的基础文件名生成分割文件名
+        output_file = f"{base_name}_{i+1}{os.path.splitext(selected_file)[1]}"
         split_files.append(output_file)
         
         ffmpeg_cmd = f'ffmpeg -i "{selected_file}" -ss {start_time} -to {end_time} -c copy "{output_file}"'
@@ -168,6 +172,12 @@ def start_conversion(file_type):
     elif file_type=='aac':
         for file in files_to_convert:
             rewrite_aac(file)
+    elif file_type == '压缩视频':
+        for file in files_to_convert:
+            compress_video(file, output_resolution, framerate, if_use_llm.get())
+    elif file_type=='压缩视频（AV1模式）':
+        for file in files_to_convert:
+            compress_video_av1(file, output_resolution, framerate, if_use_llm.get())
     else:
         for file in files_to_convert:
             more_conversion(file, file_type)
@@ -214,27 +224,23 @@ def llm(file_to_rename):
     #填写API Key
     try:
         client = OpenAI(
-        api_key="your_key",
-        base_url="https://api-inference.modelscope.cn/v1/")#魔搭社区的免费API地址
+        api_key="",
+        base_url="")
 
         response = client.chat.completions.create(
-            model="Qwen/Qwen3-235B-A22B-Instruct-2507",
+            model="gemini-2.5-flash-preview-09-2025",
             messages=[
                 {
-                    'role': 'system',
+                    'role': 'user',
                     'content': f'{llm_prompt}'
                 },
             ],
-            stream=True
+            stream=False
         )
 
-        # 收集响应内容并返回
-        result_content = ""
-        for chunk in response:
-            if chunk.choices[0].delta.content:
-                content = chunk.choices[0].delta.content
-                result_content += content
-                print(content, end='', flush=True)
+        # 直接获取响应内容并返回
+        result_content = response.choices[0].message.content
+        print(f"LLM处理结果: {result_content}", end='', flush=True)
         
         return result_content
     #处理API速率限制导致的异常，等待15秒后重新请求
@@ -245,6 +251,62 @@ def llm(file_to_rename):
             return llm(file_to_rename)  # 递归调用自身
         else:
             raise e  # 其他错误则抛出
+        
+def compress_video(input_file, output_resolution, framerate, if_llm):
+    if if_llm == 1:
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        output_filename = llm(base_name) + "_HEVC.mp4"
+    else:
+        output_filename = os.path.splitext(input_file)[0] + "_HEVC.mp4"
+    
+    try:
+        ffmpeg_cmd = (
+            f'ffmpeg -y -i "{input_file}" '
+            f'-vf "scale={output_resolution[0]}:{output_resolution[1]}:force_original_aspect_ratio=decrease:flags=lanczos,format=yuv420p" '
+            f'-r {framerate} '
+            f'-c:v hevc_nvenc -preset p7 -tune hq '
+            f'-rc vbr -b:v 8000k -maxrate 10000k -bufsize 16000k '
+            f'-profile:v main '
+            f'-spatial-aq 1 -temporal-aq 1 -aq-strength 8 '
+            f'-rc-lookahead 32 -multipass 2 -bf 3 -b_ref_mode middle '
+            f'-tag:v hvc1 '
+            f'-c:a copy "{output_filename}"'
+        )
+        print("开始压制")
+        subprocess.run(ffmpeg_cmd, shell=True, check=True)
+
+        print("完成")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"失败: {e}\n")
+
+def compress_video_av1(input_file, output_resolution, framerate, if_llm):
+    if if_llm == 1:
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        output_filename = llm(base_name) + "_AV1.mp4"
+    else:
+        output_filename = os.path.splitext(input_file)[0] + "_AV1.mp4"
+    
+    try:
+        
+        ffmpeg_cmd = (
+            f'ffmpeg -y -i "{input_file}" '
+            f'-vf "scale={output_resolution[0]}:{output_resolution[1]}:force_original_aspect_ratio=decrease:flags=lanczos,format=yuv420p" '
+            f'-r {framerate} '
+            f'-c:v av1_nvenc -preset p7 -tune hq '
+            f'-rc vbr -b:v 6000k -maxrate 8000k -bufsize 12000k '
+            f'-spatial-aq 1 -temporal-aq 1 -aq-strength 8 '
+            f'-rc-lookahead 32 -multipass 2 '
+            f'-tag:v av01 '
+            f'-c:a copy "{output_filename}"'
+        )
+        
+        print(f"开始AV1压制 : {input_file}")
+        subprocess.run(ffmpeg_cmd, shell=True, check=True)
+        print(f"AV1压制完成: {output_filename}")
+
+    except subprocess.CalledProcessError as e:
+        print(f"压制出错: {e}")
 
 # 创建 GUI
 root = Tk()
@@ -281,7 +343,7 @@ audio_bitrate_entry.insert(0, "128")
 audio_bitrate_entry.grid(row=1, column=3)
 file_type_label = Label(param_setting_frame, text="输出文件格式")
 file_type_label.grid(row=3, column=0)
-options = ["amv", "mp3", "aac", "avi", "更多(请输入)"]
+options = ["amv", "mp3", "aac", "avi", "更多(请输入)", "压缩视频", "压缩视频（AV1模式）"]
 selected_option = StringVar()
 file_type_entry = ttk.Combobox(param_setting_frame, textvariable=selected_option, values=options)
 file_type_entry.set(options[0])
