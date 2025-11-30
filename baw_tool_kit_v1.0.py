@@ -28,7 +28,7 @@ def check_and_split_video(selected_file,output_resolution, video_bitrate, audio_
     split_files = []  # 用于存储分割后的文件路径，以便后续处理和删除
     amv_files = []    # 存储生成的AMV文件路径
 
-    # 先处理基础文件名（如果启用LLM）
+    # 处理基础文件名
     if if_use_llm.get()==1:
         if_llm=False
         base_name = llm(os.path.splitext(os.path.basename(selected_file))[0])
@@ -41,7 +41,6 @@ def check_and_split_video(selected_file,output_resolution, video_bitrate, audio_
         start_time = timedelta(seconds=i*split_video_time)
         end_time = timedelta(seconds=(i+1)*split_video_time)
         
-        # 使用处理后的基础文件名生成分割文件名
         output_file = f"{base_name}_{i+1}{os.path.splitext(selected_file)[1]}"
         split_files.append(output_file)
         
@@ -52,7 +51,6 @@ def check_and_split_video(selected_file,output_resolution, video_bitrate, audio_
         amv_path = convert_to_amv(output_file, output_resolution, video_bitrate, audio_bitrate, audio_block_size, framerate,if_llm)
         amv_files.append(amv_path)
 
-    # 删除临时文件
     for file in split_files:
         os.remove(file)
 
@@ -389,3 +387,4 @@ convert_button = Button(root, text="开始转换", command=on_select)
 convert_button.pack(pady=5)
 
 root.mainloop()
+
