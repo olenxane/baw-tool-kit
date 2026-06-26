@@ -1,0 +1,11 @@
+{
+    "base_url": "https://api.deepseek.com/v1",
+    "api_key": "",
+    "model": "deepseek-v4-flash",
+    "width": 320,
+    "height": 240,
+    "video_bitrate": 700,
+    "audio_bitrate": 192,
+    "framerate": 0,
+    "split_video_time": 300
+}
