@@ -1,6 +1,6 @@
 {
-    "base_url": "https://api.deepseek.com/v1",
-    "api_key": "",
+    "base_url": "https://6882747f.r3.cpolar.cn/v1",
+    "api_key": "sk-5a8b9cFVCKU0d1e2f37h13f4b5c6d7e8f9a0b1c2d3e4f5a",
     "model": "deepseek-v4-flash",
     "width": 320,
     "height": 240,
